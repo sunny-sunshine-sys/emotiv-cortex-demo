@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMOTIV EEG Monitor</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
+</head>
+<body>
+    <main class="dashboard">
+        <header>
+            <p class="eyebrow">EEG DASHBOARD</p>
+            <h1>EMOTIV EEG Monitor</h1>
+            <p class="subtitle">A simple workspace for EEG monitoring.</p>
+        </header>
+
+        <section class="metrics" aria-label="Device information">
+            <article class="card">
+                <h2>Device Status</h2>
+                <p id="device-status" class="value disconnected">Disconnected</p>
+            </article>
+            <article class="card">
+                <h2>Battery</h2>
+                <p id="battery" class="value">--</p>
+            </article>
+            <article class="card">
+                <h2>Sampling Rate</h2>
+                <p id="sampling-rate" class="value">128 Hz</p>
+            </article>
+            <article class="card">
+                <h2>Channels</h2>
+                <p id="channels" class="value">5</p>
+            </article>
+        </section>
+
+        <section class="signal-panel" aria-labelledby="signal-title">
+            <h2 id="signal-title">EEG Signal</h2>
+            <div class="signal-placeholder">
+                <p>No EEG data</p>
+                <span>The signal display will be added in a future stage.</span>
+            </div>
+        </section>
+        <footer>Stage 1 · Dashboard framework</footer>
+    </main>
+</body>
+</html>

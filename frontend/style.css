@@ -1,0 +1,31 @@
+:root {
+    color-scheme: dark;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #e8eef7;
+    background: #0c1220;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.dashboard { max-width: 1120px; margin: 0 auto; padding: 48px 24px; }
+.eyebrow { color: #67d6c0; font-size: 12px; letter-spacing: 0.16em; }
+h1 { margin: 12px 0; font-size: clamp(28px, 5vw, 40px); }
+.subtitle, footer { color: #9caec5; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 32px 0 24px; }
+.card, .signal-panel { background: #151e2e; border: 1px solid #2a374d; border-radius: 12px; padding: 24px; }
+h2 { margin: 0; font-size: 16px; font-weight: 500; color: #b7c6d9; }
+.value { margin: 20px 0 0; font-size: 28px; font-weight: 600; }
+.disconnected { color: #f0ba76; font-size: 22px; }
+.signal-placeholder { min-height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: #9caec5; }
+.signal-placeholder p { font-size: 20px; margin: 0 0 10px; }
+.signal-placeholder span { font-size: 14px; }
+footer { margin-top: 24px; font-size: 13px; }
+
+@media (max-width: 800px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+    .dashboard { padding: 28px 16px; }
+    .metrics { grid-template-columns: 1fr; }
+    .signal-placeholder { min-height: 220px; }
+}
