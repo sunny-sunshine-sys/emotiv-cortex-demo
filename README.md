@@ -1,21 +1,23 @@
 # EMOTIV EEG Monitor
 
-简易 EMOTIV Cortex EEG 数据监控系统的第一阶段：FastAPI 后端和 HTML、CSS、原生 JavaScript 仪表盘骨架。
+简易 EMOTIV Cortex EEG 数据监控系统的第二阶段：FastAPI 后端、模拟 EEG 数据源及原生 Canvas 实时五通道仪表盘。
 
-当前页面显示 Device Status（Disconnected）、Battery（--）、Sampling Rate（128 Hz）、Channels（5）及 EEG Signal 占位区域。采样率和通道数量仅为预设显示值，不代表已连接设备。
+当前页面显示连接状态、Battery（--）、Sampling Rate（128 Hz）、Channels（5），并绘制 AF3、AF4、T7、T8、Pz 五个通道最近 8 秒的模拟波形。Connected 表示 WebSocket 连接成功，不表示真实设备已连接。
 
-本阶段不生成模拟 EEG、不绘制曲线、不连接真实设备、不调用 Cortex API，也不记录数据。
+本阶段仅使用模拟数据，不连接真实设备、不调用 Cortex API、不记录 CSV、不使用数据库或用户系统。
 
 ## 项目结构
 
 ```text
 backend/
-    main.py          # HTTP、静态文件和 WebSocket 基础入口
-    simulator.py     # 占位文件，尚未实现模拟功能
+    main.py          # HTTP、静态文件及 /ws/eeg 推送入口
+    simulator.py     # 数据源接口及模拟信号实现
 frontend/
     index.html
     app.js
     style.css
+tests/
+    test_simulator.py
 requirements.txt
 .gitignore
 README.md
@@ -64,8 +66,38 @@ python3 -m venv .venv
 - `GET /`：仪表盘首页。
 - `GET /static/style.css` 和 `GET /static/app.js`：前端资源。
 - `/docs`：FastAPI 自动生成的接口文档。
-- `WS /ws`：预留 WebSocket 通道，收到文本消息后仅回复 `{"device_status":"Disconnected"}`。不发送 EEG 数据；首页暂不连接该通道。
+- `WS /ws/eeg`：以目标 128 Hz 持续推送模拟 EEG。前端自动连接，断线后以 1～10 秒指数退避重连。
+- `WS /ws`：保留第一阶段的静态状态回复接口。
 
 静态文件路径基于 `main.py` 的位置解析。首页应通过 FastAPI 访问，不要直接打开 HTML 文件。
 
-下一阶段可独立实现模拟 EEG 数据和 WebSocket 推送，再加入曲线显示。
+## 模拟信号与数据协议
+
+每个通道使用不同的基础正弦频率（8～11.2 Hz）、小幅高频振荡（17～22.2 Hz）、低频振荡、独立高斯噪声和受限随机幅值变化。结果限幅到 ±100 μV。这些波形仅用于功能演示，不代表真实生理信号。
+
+`/ws/eeg` 每条消息格式：
+
+```json
+{"timestamp": 1700000000.123, "eeg": {"AF3": 12.3, "AF4": -8.5, "T7": 22.1, "T8": -15.2, "Pz": 3.8}}
+```
+
+时间戳为秒，数据单位为 μV。`EEGSource.stream()` 提供异步迭代接口；未来可通过 `backend/main.py` 中的 `create_eeg_source()` 替换实现。每个连接拥有独立模拟源，后端不保留历史队列；慢客户端会跳过错过的采样时刻，断线时关闭生成器。128 Hz 是目标发送速率，实际速率受调度和网络影响。
+
+前端使用原生 Canvas，绘制横轴为相对时间、纵轴为 ±100 μV 的五幅波形。最多保留 1024 条样本（128 × 8 秒），使用环形缓冲区覆盖旧数据。绘制频率最多 30 帧/秒，ResizeObserver 负责尺寸适配。HTTPS 页面自动使用 WSS；WebSocket 地址沿用页面的主机和端口，无第三方图表 CDN。
+
+## 测试
+
+Windows：
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Linux：
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+node --check frontend/app.js
+```
+
+浏览器打开首页后应显示 Connected，并出现五通道波形。停止服务应显示 Disconnected；重新启动后页面自动重连。下一阶段可增加暂停、显示窗口设置与信号质量提示，再单独规划真实 Cortex 接入。

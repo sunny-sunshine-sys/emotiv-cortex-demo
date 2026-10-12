@@ -12,13 +12,13 @@
         <header>
             <p class="eyebrow">EEG DASHBOARD</p>
             <h1>EMOTIV EEG Monitor</h1>
-            <p class="subtitle">A simple workspace for EEG monitoring.</p>
+            <p class="subtitle">Simulated EEG · 128 Hz · five channels</p>
         </header>
 
         <section class="metrics" aria-label="Device information">
             <article class="card">
                 <h2>Device Status</h2>
-                <p id="device-status" class="value disconnected">Disconnected</p>
+                <p id="device-status" aria-live="polite" class="value disconnected">Disconnected</p>
             </article>
             <article class="card">
                 <h2>Battery</h2>
@@ -36,12 +36,10 @@
 
         <section class="signal-panel" aria-labelledby="signal-title">
             <h2 id="signal-title">EEG Signal</h2>
-            <div class="signal-placeholder">
-                <p>No EEG data</p>
-                <span>The signal display will be added in a future stage.</span>
-            </div>
+            <p class="signal-description">Simulated data · Last 8 seconds · Amplitude in μV</p>
+            <div id="waveforms" class="waveforms"></div>
         </section>
-        <footer>Stage 1 · Dashboard framework</footer>
+        <footer>Simulation mode · No EMOTIV device connected</footer>
     </main>
 </body>
 </html>
