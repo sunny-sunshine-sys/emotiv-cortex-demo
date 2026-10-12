@@ -1,10 +1,10 @@
 "use strict";
 
-const CHANNELS = ["AF3", "AF4", "T7", "T8", "Pz"];
+let CHANNELS = ["AF3", "AF4", "T7", "T8", "Pz"];
 const WINDOW_SECONDS = 8;
-const MAX_SAMPLES = 128 * WINDOW_SECONDS;
+let MAX_SAMPLES = 128 * WINDOW_SECONDS;
 const COLORS = ["#67d6c0", "#79b8ff", "#c3a6ff", "#f0ba76", "#f68bad"];
-const samples = new Array(MAX_SAMPLES);
+let samples = new Array(MAX_SAMPLES);
 let head = 0;
 let count = 0;
 let socket = null;
@@ -13,19 +13,49 @@ let retryDelay = 1000;
 let stopped = false;
 let dirty = true;
 const status = document.getElementById("device-status");
-const charts = CHANNELS.map((channel, index) => {
+let sourceReady = false;
+let charts = [];
+function configureChannels(names) {
+    CHANNELS = names;
+    document.getElementById("waveforms").replaceChildren();
+    head = count = 0;
+    samples.fill(undefined);
+    document.getElementById("channels").textContent = String(names.length);
+    charts = CHANNELS.map((channel, index) => {
     const row = document.createElement("div");
     row.className = "channel-row";
     const title = document.createElement("h3");
     title.textContent = channel;
-    title.style.color = COLORS[index];
+    title.style.color = COLORS[index % COLORS.length];
     const canvas = document.createElement("canvas");
-    canvas.setAttribute("aria-label", `${channel} simulated EEG waveform, microvolts over time`);
+    canvas.setAttribute("aria-label", `${channel} EEG waveform, microvolts over time`);
     canvas.setAttribute("role", "img");
     row.append(title, canvas);
     document.getElementById("waveforms").append(row);
-    return { channel, canvas, color: COLORS[index], context: canvas.getContext("2d") };
-});
+    return { channel, canvas, color: COLORS[index % COLORS.length], context: canvas.getContext("2d") };
+    });
+    dirty = true;
+}
+configureChannels(CHANNELS);
+
+function applySource(state) {
+    sourceReady = state.ready;
+    document.getElementById("source-message").textContent = state.message;
+    document.getElementById("source-mode").textContent = state.data_source === "simulation" ? "Simulation mode · No EMOTIV device connected" : "EMOTIV Cortex mode";
+    const rate = Number(state.sampling_rate);
+    document.getElementById("sampling-rate").textContent = rate > 0 ? `${rate} Hz` : "--";
+    if (rate > 0) {
+        const capacity = Math.min(8192, Math.max(128, Math.ceil(rate * WINDOW_SECONDS)));
+        if (capacity !== MAX_SAMPLES) {
+            MAX_SAMPLES = capacity;
+            samples = new Array(capacity);
+            head = count = 0;
+            dirty = true;
+        }
+    }
+    if (state.channels.length && state.channels.join(",") !== CHANNELS.join(",")) configureChannels(state.channels);
+    setConnected(sourceReady && socket?.readyState === WebSocket.OPEN);
+}
 
 function setConnected(connected) {
     status.textContent = connected ? "Connected" : "Disconnected";
@@ -46,14 +76,16 @@ function connect() {
         count = 0;
         samples.fill(undefined);
         dirty = true;
-        setConnected(true);
+        setConnected(sourceReady);
     };
     ws.onmessage = (event) => {
         if (socket !== ws || stopped) return;
         let sample;
         try { sample = JSON.parse(event.data); } catch { return; }
-        if (!sample || !Number.isFinite(sample.timestamp) || !sample.eeg ||
-            !CHANNELS.every(channel => Number.isFinite(sample.eeg[channel]))) return;
+        if (!sample || !Number.isFinite(sample.timestamp) || !sample.eeg) return;
+        const names = Object.keys(sample.eeg);
+        if (!names.length || names.length > 64 || !names.every(channel => Number.isFinite(sample.eeg[channel]))) return;
+        if (names.join(",") !== CHANNELS.join(",")) configureChannels(names);
         if (count && sample.timestamp <= samples[(head - 1 + MAX_SAMPLES) % MAX_SAMPLES].timestamp) return;
         samples[head] = sample;
         head = (head + 1) % MAX_SAMPLES;
@@ -83,14 +115,29 @@ function drawChart({ canvas, context: ctx, channel, color }, now) {
     ctx.clearRect(0, 0, width, height);
     const left = 54, top = 12, right = width - 12, bottom = height - 28;
     const x = time => left + (time - (now - WINDOW_SECONDS)) / WINDOW_SECONDS * (right - left);
-    const y = value => top + (100 - value) / 200 * (bottom - top);
+    let low = Infinity, high = -Infinity;
+    for (let i = 0; i < count; i++) {
+        const sample = samples[(head - count + i + MAX_SAMPLES) % MAX_SAMPLES];
+        if (sample.timestamp >= now - WINDOW_SECONDS) {
+            low = Math.min(low, sample.eeg[channel]);
+            high = Math.max(high, sample.eeg[channel]);
+        }
+    }
+    if (!Number.isFinite(low) || (low >= -100 && high <= 100)) {
+        low = -100; high = 100;
+    } else {
+        const center = (low + high) / 2;
+        const span = Math.max(200, (high - low) * 1.1);
+        low = center - span / 2; high = center + span / 2;
+    }
+    const y = value => top + (high - value) / (high - low) * (bottom - top);
     ctx.font = "11px system-ui";
     ctx.lineWidth = 1;
-    for (const value of [-100, 0, 100]) {
+    for (const value of [low, (low + high) / 2, high]) {
         ctx.strokeStyle = "#2a374d";
         ctx.beginPath(); ctx.moveTo(left, y(value)); ctx.lineTo(right, y(value)); ctx.stroke();
         ctx.fillStyle = "#9caec5";
-        ctx.fillText(`${value}`, 6, y(value) + 4);
+        ctx.fillText(`${Math.round(value)}`, 6, y(value) + 4);
     }
     ctx.fillText("μV", 6, height - 7);
     for (let seconds = -8; seconds <= 0; seconds += 2) {
@@ -167,7 +214,7 @@ function showRecording(state) {
     recordingTime.textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
     recordingFile.textContent = last ? `${last.filename} · ${last.sample_count} samples · ${last.duration_seconds.toFixed(2)} s` : "No completed recording";
     recordingError.textContent = state.error || recordingActionError;
-    startButton.disabled = recordingBusy || active;
+    startButton.disabled = recordingBusy || active || !sourceReady;
     stopButton.disabled = recordingBusy || !active;
     downloadButton.disabled = recordingBusy || active || !last;
 }
@@ -183,8 +230,13 @@ async function refreshRecording() {
     if (recordingBusy) return;
     const generation = pollingGeneration;
     try {
-        const state = await recordingRequest("/api/recording/status");
-        if (generation === pollingGeneration && !recordingBusy && !stopped) showRecording(state);
+        const [state, source] = await Promise.all([
+            recordingRequest("/api/recording/status"), recordingRequest("/api/source/status"),
+        ]);
+        if (generation === pollingGeneration && !recordingBusy && !stopped) {
+            applySource(source);
+            showRecording(state);
+        }
     } catch (error) {
         if (generation !== pollingGeneration || recordingBusy || stopped) return;
         recordingError.textContent = `Recording status unavailable: ${error.message}`;

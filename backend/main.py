@@ -1,6 +1,7 @@
 """FastAPI entry point for shared simulated EEG streaming and CSV recording."""
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -8,6 +9,9 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketState
+from dotenv import load_dotenv
+
+from backend.cortex_source import CortexEEGSource
 
 from backend.recorder import EEGRecorder
 from backend.simulator import EEGSource, SimulatedEEGSource
@@ -15,11 +19,20 @@ from backend.stream import EEGStream
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = PROJECT_DIR / "frontend"
+load_dotenv(PROJECT_DIR / ".env", override=False)
 
 
 def create_eeg_source() -> EEGSource:
-    """Replace this factory to use a future hardware source."""
-    return SimulatedEEGSource()
+    mode = os.getenv('DATA_SOURCE', 'simulation').strip().lower()
+    if mode == 'simulation':
+        return SimulatedEEGSource()
+    if mode == 'emotiv':
+        return CortexEEGSource(
+            os.getenv('EMOTIV_CLIENT_ID', ''), os.getenv('EMOTIV_CLIENT_SECRET', ''),
+            ca_file=os.getenv('EMOTIV_CA_CERT') or None,
+            headset_id=os.getenv('EMOTIV_HEADSET_ID') or None,
+        )
+    raise ValueError("DATA_SOURCE must be simulation or emotiv.")
 
 
 @asynccontextmanager
@@ -52,8 +65,14 @@ async def index():
 
 @app.post("/api/recording/start")
 async def start_recording(request: Request):
+    recorder = request.app.state.recorder
+    if recorder.is_recording:
+        return recorder.status()
+    source_status = request.app.state.eeg_stream.status()
+    if not source_status['ready']:
+        raise HTTPException(409, source_status['message'])
     try:
-        return request.app.state.recorder.start()
+        return recorder.start(source_status['channels'])
     except OSError as exc:
         raise HTTPException(500, "Cannot create CSV; check data directory permissions and disk space.") from exc
 
@@ -65,6 +84,11 @@ async def stop_recording(request: Request):
     if result is None:
         raise HTTPException(409, "No recording has been started.")
     return {**result, "is_recording": False, "error": recorder.error}
+
+
+@app.get("/api/source/status")
+async def source_status(request: Request):
+    return request.app.state.eeg_stream.status()
 
 
 @app.get("/api/recording/status")

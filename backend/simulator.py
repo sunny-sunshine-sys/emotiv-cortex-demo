@@ -17,6 +17,8 @@ class EEGSample(TypedDict):
 
 
 class EEGSource(Protocol):
+    status: dict
+
     def stream(self) -> AsyncGenerator[EEGSample, None]:
         """Yield timestamped microvolt samples; release resources on close."""
         ...
@@ -26,6 +28,9 @@ class SimulatedEEGSource:
     """Independent channel oscillations, amplitude drift and Gaussian noise."""
 
     def __init__(self, seed: int | None = None):
+        self.status = {'data_source': 'simulation', 'state': 'connected', 'ready': True,
+                       'message': 'Receiving simulated EEG.', 'channels': list(CHANNELS),
+                       'sampling_rate': SAMPLING_RATE}
         self.random = random.Random(seed)
         self.amplitudes = [42.0 + 3 * i for i in range(len(CHANNELS))]
 

@@ -12,7 +12,7 @@
         <header>
             <p class="eyebrow">EEG DASHBOARD</p>
             <h1>EMOTIV EEG Monitor</h1>
-            <p class="subtitle">Simulated EEG · 128 Hz · five channels</p>
+            <p id="source-message" class="subtitle" aria-live="polite">Connecting to EEG source…</p>
         </header>
 
         <section class="metrics" aria-label="Device information">
@@ -49,10 +49,10 @@
 
         <section class="signal-panel" aria-labelledby="signal-title">
             <h2 id="signal-title">EEG Signal</h2>
-            <p class="signal-description">Simulated data · Last 8 seconds · Amplitude in μV</p>
+            <p class="signal-description">Last 8 seconds · Amplitude in μV</p>
             <div id="waveforms" class="waveforms"></div>
         </section>
-        <footer>Simulation mode · No EMOTIV device connected</footer>
+        <footer id="source-mode">EEG Monitor</footer>
     </main>
 </body>
 </html>

@@ -19,6 +19,7 @@ class EEGRecorder:
     def __init__(self, directory: Path):
         self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
+        self.channels = tuple(CHANNELS)
         self.file = None
         self.writer = None
         self.filename = None
@@ -42,20 +43,24 @@ class EEGRecorder:
             "error": self.error,
         }
 
-    def start(self) -> dict:
+    def start(self, channels=CHANNELS) -> dict:
         if self.is_recording:
             return self.status()
+        channels = tuple(channels)
+        if not channels or len(set(channels)) != len(channels):
+            raise ValueError("Recording needs a nonempty, unique channel layout.")
         # Exclusive creation plus a UUID prevents overwriting earlier recordings.
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
         filename = f"eeg_{stamp}_{uuid4().hex}.csv"
         file = (self.directory / filename).open("x", newline="", encoding="utf-8")
         try:
             writer = csv.writer(file)
-            writer.writerow(CSV_FIELDS)
+            writer.writerow(("timestamp", *channels))
             file.flush()
         except BaseException:
             file.close()
             raise
+        self.channels = channels
         self.file, self.writer, self.filename = file, writer, filename
         self.started = time.monotonic()
         self.last_flush = self.started
@@ -66,8 +71,12 @@ class EEGRecorder:
     def append(self, sample: EEGSample) -> None:
         if not self.is_recording:
             return
+        if set(sample['eeg']) != set(self.channels):
+            self.error = "EEG channel layout changed; recording stopped. Start a new recording for the new channels."
+            self.stop()
+            return
         try:
-            self.writer.writerow([sample['timestamp'], *(sample['eeg'][name] for name in CHANNELS)])
+            self.writer.writerow([sample['timestamp'], *(sample['eeg'][name] for name in self.channels)])
             self.sample_count += 1
             if time.monotonic() - self.last_flush >= 1:
                 self.file.flush()
@@ -83,6 +92,7 @@ class EEGRecorder:
             "filename": self.filename,
             "duration_seconds": time.monotonic() - self.started,
             "sample_count": self.sample_count,
+            "channels": list(self.channels),
             "download_url": f"/api/recording/download/{self.filename}",
         }
         file = self.file
