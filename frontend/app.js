@@ -142,3 +142,98 @@ window.addEventListener("pageshow", event => {
 });
 connect();
 requestAnimationFrame(render);
+
+// Recording is server-wide and continues independently of the page/WebSocket.
+const startButton = document.getElementById("start-recording");
+const stopButton = document.getElementById("stop-recording");
+const downloadButton = document.getElementById("download-csv");
+const recordingStatus = document.getElementById("recording-status");
+const recordingTime = document.getElementById("recording-time");
+const recordingFile = document.getElementById("recording-file");
+const recordingError = document.getElementById("recording-error");
+let recordingState = null;
+let recordingBusy = false;
+let recordingPoll = null;
+let pollingGeneration = 0;
+let recordingActionError = "";
+
+function showRecording(state) {
+    recordingState = state;
+    const active = state.is_recording;
+    recordingStatus.textContent = active ? "Recording" : "Not recording";
+    recordingStatus.classList.toggle("active", active);
+    const last = state.last_recording;
+    const seconds = Math.floor(active ? state.duration_seconds : (last?.duration_seconds || 0));
+    recordingTime.textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+    recordingFile.textContent = last ? `${last.filename} · ${last.sample_count} samples · ${last.duration_seconds.toFixed(2)} s` : "No completed recording";
+    recordingError.textContent = state.error || recordingActionError;
+    startButton.disabled = recordingBusy || active;
+    stopButton.disabled = recordingBusy || !active;
+    downloadButton.disabled = recordingBusy || active || !last;
+}
+
+async function recordingRequest(path, method = "GET") {
+    const response = await fetch(path, {method, cache: "no-store", signal: AbortSignal.timeout(5000)});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+    return result;
+}
+
+async function refreshRecording() {
+    if (recordingBusy) return;
+    const generation = pollingGeneration;
+    try {
+        const state = await recordingRequest("/api/recording/status");
+        if (generation === pollingGeneration && !recordingBusy && !stopped) showRecording(state);
+    } catch (error) {
+        if (generation !== pollingGeneration || recordingBusy || stopped) return;
+        recordingError.textContent = `Recording status unavailable: ${error.message}`;
+        startButton.disabled = stopButton.disabled = downloadButton.disabled = true;
+    }
+}
+
+async function changeRecording(action) {
+    if (recordingBusy) return;
+    recordingBusy = true;
+    recordingActionError = "";
+    pollingGeneration++;
+    startButton.disabled = stopButton.disabled = downloadButton.disabled = true;
+    clearTimeout(recordingPoll);
+    try {
+        const result = await recordingRequest(`/api/recording/${action}`, "POST");
+        if (action === "stop") {
+            showRecording({is_recording: false, last_recording: result, error: result.error});
+        } else {
+            showRecording(result);
+        }
+    } catch (error) {
+        recordingActionError = `Recording request failed: ${error.message}`;
+        recordingError.textContent = recordingActionError;
+    } finally {
+        recordingBusy = false;
+        if (recordingState) showRecording(recordingState);
+        await pollRecording();
+    }
+}
+
+async function pollRecording() {
+    if (stopped) return;
+    const generation = ++pollingGeneration;
+    clearTimeout(recordingPoll);
+    await refreshRecording();
+    if (!stopped && generation === pollingGeneration) recordingPoll = setTimeout(pollRecording, 1000);
+}
+startButton.addEventListener("click", () => changeRecording("start"));
+stopButton.addEventListener("click", () => changeRecording("stop"));
+downloadButton.addEventListener("click", () => {
+    if (!recordingState?.last_recording || downloadButton.disabled) return;
+    const link = document.createElement("a");
+    link.href = recordingState.last_recording.download_url;
+    link.download = recordingState.last_recording.filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+});
+window.addEventListener("pagehide", () => { pollingGeneration++; clearTimeout(recordingPoll); });
+window.addEventListener("pageshow", event => { if (event.persisted) pollRecording(); });
+pollRecording();

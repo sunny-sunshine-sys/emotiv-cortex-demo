@@ -2,3 +2,7 @@
 __pycache__/
 .env
 *.pyc
+
+# Local EEG recordings (keep only the empty directory marker)
+/data/*
+!/data/.gitkeep

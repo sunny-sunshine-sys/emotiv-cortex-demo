@@ -34,6 +34,19 @@
             </article>
         </section>
 
+        <section class="recording-panel card" aria-labelledby="recording-title">
+            <h2 id="recording-title">EEG Recording</h2>
+            <p><span id="recording-status" aria-live="polite">Checking status…</span>
+               <span id="recording-time">00:00</span></p>
+            <div class="recording-actions">
+                <button id="start-recording" type="button" disabled>Start Recording</button>
+                <button id="stop-recording" type="button" disabled>Stop Recording</button>
+                <button id="download-csv" type="button" disabled>Download CSV</button>
+            </div>
+            <p id="recording-file" class="signal-description">No completed recording</p>
+            <p id="recording-error" role="alert"></p>
+        </section>
+
         <section class="signal-panel" aria-labelledby="signal-title">
             <h2 id="signal-title">EEG Signal</h2>
             <p class="signal-description">Simulated data · Last 8 seconds · Amplitude in μV</p>
