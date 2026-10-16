@@ -56,7 +56,7 @@ class Launcher:
         tools.pack(anchor='w', pady=14)
         ttk.Button(tools, text='设备配置 (.env)', command=self.open_config).pack(side='left', padx=(0, 10))
         ttk.Button(tools, text='查看日志', command=self.open_log).pack(side='left')
-        ttk.Label(frame, text='关闭浏览器不会停止服务。退出此启动器会安全停止服务并保存 CSV。', wraplength=550).pack(anchor='w')
+        ttk.Label(frame, text='关闭浏览器不会停止服务。退出此启动器会安全停止服务并保存实验数据集。', wraplength=550).pack(anchor='w')
         window.after(100, self.poll)
 
     def controls(self):

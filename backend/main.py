@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.websockets import WebSocketState
 from pydantic import BaseModel, Field
 
 from backend.external_source import ExternalEEGSource, ExternalEMGSource
@@ -239,8 +240,13 @@ async def websocket_signal(websocket: WebSocket, modality: str):
         while True:
             sample = await queue.get()
             await websocket.send_json(sample)
-    except (WebSocketDisconnect, RuntimeError):
+    except WebSocketDisconnect:
         pass
+    except RuntimeError as exc:
+        transport_closed = str(exc).startswith("Unexpected ASGI message 'websocket.send', after sending 'websocket.close'")
+        if (not transport_closed and websocket.client_state is not WebSocketState.DISCONNECTED and
+                websocket.application_state is not WebSocketState.DISCONNECTED):
+            raise
     finally:
         stream.unsubscribe(queue)
 

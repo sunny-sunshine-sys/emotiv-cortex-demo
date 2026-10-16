@@ -91,12 +91,12 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DisconnectRaceTests(unittest.IsolatedAsyncioTestCase):
-    async def check_race(self, disconnected):
+    async def check_race(self, disconnected, transport_closed=False):
         with tempfile.TemporaryDirectory() as directory:
             recorder = EEGRecorder(Path(directory))
             stream = EEGStream(SimulatedEEGSource(), recorder)
             socket = SimpleNamespace(
-                app=SimpleNamespace(state=SimpleNamespace(eeg_stream=stream)),
+                app=SimpleNamespace(state=SimpleNamespace(streams={"eeg": stream})),
                 client_state=WebSocketState.CONNECTED,
                 application_state=WebSocketState.CONNECTED,
             )
@@ -107,12 +107,14 @@ class DisconnectRaceTests(unittest.IsolatedAsyncioTestCase):
             async def send(sample):
                 if disconnected:
                     socket.client_state = WebSocketState.DISCONNECTED
+                if transport_closed:
+                    raise RuntimeError("Unexpected ASGI message 'websocket.send', after sending 'websocket.close' or response already completed.")
                 raise RuntimeError("send failed during disconnect")
             socket.accept, socket.receive_text, socket.send_json = accept, receive, send
             task = asyncio.create_task(websocket_eeg(socket))
             await asyncio.sleep(0)
             stream.publish(SimulatedEEGSource().sample(0, 1))
-            if disconnected:
+            if disconnected or transport_closed:
                 await asyncio.wait_for(task, 1)
             else:
                 with self.assertRaises(RuntimeError):
@@ -124,3 +126,6 @@ class DisconnectRaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unrelated_send_error_is_not_hidden(self):
         await self.check_race(False)
+
+    async def test_transport_closed_before_client_state_updates(self):
+        await self.check_race(False, transport_closed=True)
