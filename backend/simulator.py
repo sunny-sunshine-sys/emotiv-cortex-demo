@@ -1,4 +1,4 @@
-"""Bounded, pull-based EEG source interface and synthetic implementation."""
+"""Bounded pull-based signal sources and deterministic demo generators."""
 
 import asyncio
 import math
@@ -10,10 +10,18 @@ from typing import Protocol, TypedDict
 CHANNELS = ("AF3", "AF4", "T7", "T8", "Pz")
 SAMPLING_RATE = 128
 
+EMG_CHANNELS = ("FCR", "ECR", "BIC", "TRI")
+EMG_SAMPLING_RATE = 200
+
 
 class EEGSample(TypedDict):
     timestamp: float
     eeg: dict[str, float]
+
+
+class EMGSample(TypedDict):
+    timestamp: float
+    emg: dict[str, float]
 
 
 class EEGSource(Protocol):
@@ -28,23 +36,36 @@ class SimulatedEEGSource:
     """Independent channel oscillations, amplitude drift and Gaussian noise."""
 
     def __init__(self, seed: int | None = None):
-        self.status = {'data_source': 'simulation', 'state': 'connected', 'ready': True,
-                       'message': 'Receiving simulated EEG.', 'channels': list(CHANNELS),
-                       'sampling_rate': SAMPLING_RATE}
+        self.status = {
+            "data_source": "simulation",
+            "state": "connected",
+            "ready": True,
+            "message": "正在生成模拟 EEG 数据。",
+            "channels": list(CHANNELS),
+            "sampling_rate": SAMPLING_RATE,
+            "device": "模拟脑电采集器",
+            "accepted_samples": 0,
+        }
         self.random = random.Random(seed)
         self.amplitudes = [42.0 + 3 * i for i in range(len(CHANNELS))]
 
     def sample(self, elapsed: float, timestamp: float) -> EEGSample:
         eeg = {}
         for i, channel in enumerate(CHANNELS):
-            # Slowly varying bounded amplitude, with an independent random walk.
-            self.amplitudes[i] = max(30.0, min(60.0, self.amplitudes[i] + self.random.uniform(-0.3, 0.3)))
+            self.amplitudes[i] = max(
+                30.0, min(60.0, self.amplitudes[i] + self.random.uniform(-0.3, 0.3))
+            )
             phase = i * 0.7
-            base = self.amplitudes[i] * math.sin(2 * math.pi * (8 + i * 0.8) * elapsed + phase)
-            small = 12 * math.sin(2 * math.pi * (17 + i * 1.3) * elapsed + phase * 2)
+            base = self.amplitudes[i] * math.sin(
+                2 * math.pi * (8 + i * 0.8) * elapsed + phase
+            )
+            small = 12 * math.sin(
+                2 * math.pi * (17 + i * 1.3) * elapsed + phase * 2
+            )
             slow = 6 * math.sin(2 * math.pi * (1.2 + i * 0.2) * elapsed)
             value = base + small + slow + self.random.gauss(0, 4)
             eeg[channel] = round(max(-100.0, min(100.0, value)), 3)
+        self.status["accepted_samples"] += 1
         return {"timestamp": timestamp, "eeg": eeg}
 
     async def stream(self) -> AsyncGenerator[EEGSample, None]:
@@ -55,5 +76,56 @@ class SimulatedEEGSource:
             await asyncio.sleep(max(0, started + tick / SAMPLING_RATE - time.monotonic()))
             elapsed = time.monotonic() - started
             yield self.sample(elapsed, wall_time + elapsed)
-            # Slow consumers skip missed ticks instead of building a queue or burst.
-            tick = max(tick + 1, math.floor((time.monotonic() - started) * SAMPLING_RATE) + 1)
+            tick = max(
+                tick + 1,
+                math.floor((time.monotonic() - started) * SAMPLING_RATE) + 1,
+            )
+
+
+class SimulatedEMGSource:
+    """Synthetic surface-EMG-like activity with periodic muscle bursts."""
+
+    def __init__(self, seed: int | None = None):
+        self.status = {
+            "data_source": "simulation",
+            "state": "connected",
+            "ready": True,
+            "message": "正在生成模拟肌电数据。",
+            "channels": list(EMG_CHANNELS),
+            "sampling_rate": EMG_SAMPLING_RATE,
+            "device": "模拟肌电手环",
+            "accepted_samples": 0,
+        }
+        self.random = random.Random(seed)
+        self.phase = [self.random.random() * 6.28 for _ in EMG_CHANNELS]
+
+    def sample(self, elapsed: float, timestamp: float) -> EMGSample:
+        emg = {}
+        for i, channel in enumerate(EMG_CHANNELS):
+            carrier = abs(
+                math.sin(
+                    2 * math.pi * (18 + i * 4) * elapsed + self.phase[i]
+                )
+            )
+            envelope = 0.18 + 0.82 * max(
+                0.0,
+                math.sin(2 * math.pi * (0.32 + i * 0.05) * elapsed + i * 0.9),
+            )
+            burst = 0.55 * envelope * carrier
+            noise = abs(self.random.gauss(0, 0.08))
+            emg[channel] = round(min(1.5, burst + noise), 4)
+        self.status["accepted_samples"] += 1
+        return {"timestamp": timestamp, "emg": emg}
+
+    async def stream(self) -> AsyncGenerator[EMGSample, None]:
+        started = time.monotonic()
+        wall_time = time.time()
+        tick = 0
+        while True:
+            await asyncio.sleep(max(0, started + tick / EMG_SAMPLING_RATE - time.monotonic()))
+            elapsed = time.monotonic() - started
+            yield self.sample(elapsed, wall_time + elapsed)
+            tick = max(
+                tick + 1,
+                math.floor((time.monotonic() - started) * EMG_SAMPLING_RATE) + 1,
+            )
