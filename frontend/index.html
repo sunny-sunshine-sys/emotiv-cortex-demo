@@ -1,58 +1,127 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EMOTIV EEG Monitor</title>
+    <title>NeuroFusion · 多模态神经信号采集平台</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/app.js" defer></script>
 </head>
 <body>
-    <main class="dashboard">
-        <header>
-            <p class="eyebrow">EEG DASHBOARD</p>
-            <h1>EMOTIV EEG Monitor</h1>
-            <p id="source-message" class="subtitle" aria-live="polite">Connecting to EEG source…</p>
-        </header>
+<main class="dashboard">
+    <header class="hero">
+        <div>
+            <p class="eyebrow">NEUROFUSION · MULTIMODAL DATA PLATFORM</p>
+            <h1>多模态神经信号采集平台</h1>
+            <p id="source-message" class="subtitle">正在连接数据采集服务…</p>
+        </div>
+        <div id="mode-badge" class="badge">SIMULATION</div>
+    </header>
 
-        <section class="metrics" aria-label="Device information">
-            <article class="card">
-                <h2>Device Status</h2>
-                <p id="device-status" aria-live="polite" class="value disconnected">Disconnected</p>
-            </article>
-            <article class="card">
-                <h2>Battery</h2>
-                <p id="battery" class="value">--</p>
-            </article>
-            <article class="card">
-                <h2>Sampling Rate</h2>
-                <p id="sampling-rate" class="value">128 Hz</p>
-            </article>
-            <article class="card">
-                <h2>Channels</h2>
-                <p id="channels" class="value">5</p>
-            </article>
-        </section>
+    <section class="metrics" aria-label="系统状态">
+        <article class="card metric">
+            <span class="label">EEG设备</span>
+            <strong id="device-status">等待连接</strong>
+            <small id="device-name">未检测到设备</small>
+        </article>
+        <article class="card metric">
+            <span class="label">采样率</span>
+            <strong id="sampling-rate">--</strong>
+            <small>实时数据</small>
+        </article>
+        <article class="card metric">
+            <span class="label">通道数</span>
+            <strong id="channels">0</strong>
+            <small id="channel-list">等待数据</small>
+        </article>
+        <article class="card metric">
+            <span class="label">已接收样本</span>
+            <strong id="sample-count">0</strong>
+            <small>本次服务</small>
+        </article>
+    </section>
 
-        <section class="recording-panel card" aria-labelledby="recording-title">
-            <h2 id="recording-title">EEG Recording</h2>
-            <p><span id="recording-status" aria-live="polite">Checking status…</span>
-               <span id="recording-time">00:00</span></p>
-            <div class="recording-actions">
-                <button id="start-recording" type="button" disabled>Start Recording</button>
-                <button id="stop-recording" type="button" disabled>Stop Recording</button>
-                <button id="download-csv" type="button" disabled>Download CSV</button>
+    <section class="card ingest-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">DEVICE INPUT</p>
+                <h2>EEG设备接入</h2>
             </div>
-            <p id="recording-file" class="signal-description">No completed recording</p>
-            <p id="recording-error" role="alert"></p>
+            <span class="status-dot" id="input-dot"></span>
+        </div>
+        <p class="description">
+            支持任何能把原始 EEG 样本转换为标准 JSON 的设备或桥接程序。
+            浏览器不直接读取硬件，而由设备端通过 HTTP / WebSocket 推送到本平台。
+        </p>
+        <div class="endpoint-grid">
+            <div>
+                <span>HTTP 接口</span>
+                <code id="http-endpoint">/api/eeg/ingest</code>
+            </div>
+            <div>
+                <span>WebSocket 接口</span>
+                <code id="ws-endpoint">/ws/eeg/ingest</code>
+            </div>
+            <div>
+                <span>数据格式</span>
+                <code>{"timestamp": ..., "eeg": {"C3": 12.4}}</code>
+            </div>
+        </div>
+        <div class="demo-send">
+            <div>
+                <span class="label">快速测试</span>
+                <p>点击按钮生成一条标准 EEG 样本，验证网页接收链路。</p>
+            </div>
+            <button id="send-demo" type="button">发送测试样本</button>
+        </div>
+        <p id="ingest-result" class="hint"></p>
+    </section>
+
+    <section class="signal-panel card">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">LIVE EEG</p>
+                <h2>实时脑电波形</h2>
+            </div>
+            <span class="unit">μV · 最近 8 秒</span>
+        </div>
+        <div id="waveforms" class="waveforms"></div>
+    </section>
+
+    <section class="lower-grid">
+        <section class="card recording-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">DATASET</p>
+                    <h2>数据记录</h2>
+                </div>
+                <span id="recording-status">未记录</span>
+            </div>
+            <div class="recording-time" id="recording-time">00:00</div>
+            <div class="recording-actions">
+                <button id="start-recording" type="button" disabled>开始记录</button>
+                <button id="stop-recording" type="button" disabled>停止记录</button>
+                <button id="download-csv" type="button" disabled>下载 CSV</button>
+            </div>
+            <p id="recording-file" class="hint">尚无完成的记录</p>
+            <p id="recording-error" class="error" role="alert"></p>
         </section>
 
-        <section class="signal-panel" aria-labelledby="signal-title">
-            <h2 id="signal-title">EEG Signal</h2>
-            <p class="signal-description">Last 8 seconds · Amplitude in μV</p>
-            <div id="waveforms" class="waveforms"></div>
+        <section class="card roadmap">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">MULTIMODAL</p>
+                    <h2>多模态扩展</h2>
+                </div>
+            </div>
+            <div class="module"><b>01</b><span><strong>EEG</strong> 原始脑电</span><em>已接入</em></div>
+            <div class="module"><b>02</b><span><strong>EMG</strong> 肌电手环</span><em>可扩展</em></div>
+            <div class="module"><b>03</b><span><strong>Vision</strong> 多模态摄像头</span><em>可扩展</em></div>
+            <div class="module"><b>04</b><span><strong>Fusion</strong> 时间同步与模型训练</span><em>规划中</em></div>
         </section>
-        <footer id="source-mode">EEG Monitor</footer>
-    </main>
+    </section>
+
+    <footer>NeuroFusion · 原始数据采集、同步记录与多模态训练数据构建 Demo</footer>
+</main>
 </body>
 </html>
