@@ -199,24 +199,29 @@ async function refreshSource() {
 }
 
 async function sendDemoSample() {
-    const now = Date.now() / 1000;
-    if (lastTimestamp !== null && now <= lastTimestamp) return;
-    demoPhase += 0.12;
-    const eeg = {};
     const names = CHANNELS.length ? CHANNELS : ["C3", "C4", "P3", "P4"];
-    names.forEach((name, i) => {
-        eeg[name] = Number((25 * Math.sin(demoPhase * (1 + i * 0.04)) + 7 * Math.sin(demoPhase * 3 + i) + (Math.random() - 0.5) * 5).toFixed(3));
-    });
+    const start = Math.max(Date.now() / 1000, (lastTimestamp ?? 0) + 0.001);
+    let accepted = 0;
     try {
-        const response = await fetch("/api/eeg/ingest", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({timestamp: now, eeg, device: "Demo EEG Device", sampling_rate: 128})
-        });
-        const result = await response.json();
-        $("ingest-result").textContent = response.ok ? "✓ 测试样本已接收：" + result.channels.join(", ") : "× " + (result.detail || "接收失败");
+        for (let n = 0; n < 128; n++) {
+            const t = start + n / 128;
+            const eeg = {};
+            names.forEach((name, i) => {
+                const phase = demoPhase + n * 0.11;
+                eeg[name] = Number((25 * Math.sin(phase * (1 + i * 0.04)) + 7 * Math.sin(phase * 3 + i) + (Math.random() - 0.5) * 5).toFixed(3));
+            });
+            const response = await fetch("/api/eeg/ingest", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({timestamp: t, eeg, device: "Demo EEG Device", sampling_rate: 128})
+            });
+            if (!response.ok) throw new Error((await response.json()).detail || "接收失败");
+            accepted++;
+        }
+        demoPhase += 14;
+        $("ingest-result").textContent = "✓ 已注入 " + accepted + " 条测试样本；真实设备接入后可替换此数据源。";
     } catch (error) {
-        $("ingest-result").textContent = "× " + error.message;
+        $("ingest-result").textContent = "× 已接收 " + accepted + " 条；" + error.message;
     }
 }
 
@@ -229,6 +234,7 @@ function recordingUI(state) {
     const seconds = Math.floor(active ? state.duration_seconds : (state.last_recording?.duration_seconds || 0));
     $("recording-time").textContent = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
     const last = state.last_recording;
+    window.lastRecordingFilename = last?.filename || null;
     $("recording-file").textContent = last
         ? last.filename + " · " + last.sample_count + " samples · " + last.duration_seconds.toFixed(2) + " s"
         : "尚无完成的记录";
