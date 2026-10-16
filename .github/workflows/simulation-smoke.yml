@@ -16,38 +16,50 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Start simulation server
+      - name: Start multimodal simulation server
         run: |
           python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/api/source/status > /tmp/status.json; then break; fi
+            if curl -fsS http://127.0.0.1:8000/api/session/status > /tmp/status.json; then break; fi
             sleep 1
           done
           cat /tmp/status.json
           python - <<'PY'
           import json
           s=json.load(open("/tmp/status.json"))
-          assert s["data_source"]=="simulation"
-          assert s["ready"] is True
-          assert len(s["channels"])==5
-          assert s["sampling_rate"]==128
+          assert s["modalities"]["eeg"]["ready"] is True
+          assert s["modalities"]["emg"]["ready"] is True
+          assert len(s["modalities"]["eeg"]["channels"])==5
+          assert len(s["modalities"]["emg"]["channels"])==4
+          assert s["modalities"]["eeg"]["sampling_rate"]==128
+          assert s["modalities"]["emg"]["sampling_rate"]==200
           PY
-      - name: Record simulated EEG and verify CSV
+      - name: Record a multimodal session and verify dataset
         run: |
-          curl -fsS -X POST http://127.0.0.1:8000/api/recording/start > /tmp/start.json
+          curl -fsS -X POST http://127.0.0.1:8000/api/recording/start             -H "Content-Type: application/json"             -d '{"participant_id":"P001","task":"握拳","repetition":1}' > /tmp/start.json
           sleep 2
           curl -fsS -X POST http://127.0.0.1:8000/api/recording/stop > /tmp/stop.json
           cat /tmp/stop.json
           python - <<'PY'
-          import json, urllib.request
+          import json, urllib.request, zipfile, io, csv
           s=json.load(open("/tmp/stop.json"))
-          assert s["sample_count"] >= 100, s
-          assert len(s["channels"]) == 5, s
-          data=urllib.request.urlopen("http://127.0.0.1:8000"+s["download_url"]).read().decode()
-          assert data.startswith("timestamp,AF3,AF4,T7,T8,Pz"), data[:100]
-          assert data.count("\n") > 100
-          print("simulation smoke test passed")
+          assert s["signal_counts"]["eeg"] >= 100, s
+          assert s["signal_counts"]["emg"] >= 100, s
+          assert s["event_count"] >= 2, s
+          data=urllib.request.urlopen("http://127.0.0.1:8000"+s["download_url"]).read()
+          with zipfile.ZipFile(io.BytesIO(data)) as z:
+              names=set(z.namelist())
+              assert {"signals.csv","vision.csv","events.csv","manifest.json"} <= names, names
+              signals=z.read("signals.csv").decode()
+              events=z.read("events.csv").decode()
+              assert "timestamp,modality,channel,value,device,sampling_rate,session_id" in signals
+              assert "session_start" in events
+          print("multimodal simulation smoke test passed")
           PY
+      - name: Check frontend JavaScript syntax
+        run: node --check frontend/app.js
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/uvicorn.log
