@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统</title>
+    <meta name="theme-color" content="#07111f">
+    <title>脑电、肌电与视觉多模态数据采集与处理系统</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/app.js" defer></script>
 </head>
@@ -11,117 +12,204 @@
 <main class="dashboard">
     <header class="hero">
         <div>
-            <p class="eyebrow">NEUROFUSION · MULTIMODAL DATA PLATFORM</p>
-            <h1>基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统</h1>
-            <p id="source-message" class="subtitle">正在连接数据采集服务…</p>
+            <p class="eyebrow">MULTIMODAL BIOSIGNAL LAB · DATA ACQUISITION</p>
+            <h1>脑电、肌电与视觉<br><span>多模态数据采集与处理系统</span></h1>
+            <p id="source-message" class="subtitle">正在初始化多模态采集服务…</p>
         </div>
-        <div id="mode-badge" class="badge">SIMULATION</div>
+        <div class="hero-badge">
+            <span class="status-dot on"></span>
+            <span id="system-state">SYSTEM READY</span>
+        </div>
     </header>
 
     <section class="metrics" aria-label="系统状态">
         <article class="card metric">
-            <span class="label">EEG设备</span>
-            <strong id="device-status">等待连接</strong>
-            <small id="device-name">未检测到设备</small>
+            <div class="metric-top"><span class="label">EEG 脑电</span><span id="eeg-dot" class="tiny-dot"></span></div>
+            <strong id="eeg-status">初始化</strong>
+            <small id="eeg-device">模拟脑电采集器 · -- Hz</small>
         </article>
         <article class="card metric">
-            <span class="label">采样率</span>
-            <strong id="sampling-rate">--</strong>
-            <small>实时数据</small>
+            <div class="metric-top"><span class="label">EMG 肌电</span><span id="emg-dot" class="tiny-dot"></span></div>
+            <strong id="emg-status">初始化</strong>
+            <small id="emg-device">模拟肌电手环 · -- Hz</small>
         </article>
         <article class="card metric">
-            <span class="label">通道数</span>
-            <strong id="channels">0</strong>
-            <small id="channel-list">等待数据</small>
+            <div class="metric-top"><span class="label">Vision 视觉</span><span id="vision-dot" class="tiny-dot"></span></div>
+            <strong id="vision-status">等待摄像头</strong>
+            <small id="vision-detail">视频帧 / 动作片段</small>
         </article>
         <article class="card metric">
-            <span class="label">已接收样本</span>
-            <strong id="sample-count">0</strong>
-            <small>本次服务</small>
+            <div class="metric-top"><span class="label">时间同步</span><span id="sync-dot" class="tiny-dot"></span></div>
+            <strong id="sync-status">等待数据</strong>
+            <small id="sync-detail">统一实验时间轴</small>
         </article>
     </section>
 
-    <section class="card ingest-panel">
-        <div class="section-heading">
-            <div>
-                <p class="eyebrow">DEVICE INPUT</p>
-                <h2>EEG设备接入</h2>
-            </div>
-            <span class="status-dot" id="input-dot"></span>
+    <section class="card experiment-bar">
+        <div>
+            <p class="eyebrow">EXPERIMENT SESSION</p>
+            <h2>实验任务与采集控制</h2>
         </div>
-        <p class="description">
-            支持任何能把原始 EEG 样本转换为标准 JSON 的设备或桥接程序。
-            浏览器不直接读取硬件，而由设备端通过 HTTP / WebSocket 推送到本平台。
-        </p>
-        <div class="endpoint-grid">
-            <div>
-                <span>HTTP 接口</span>
-                <code id="http-endpoint">/api/eeg/ingest</code>
-            </div>
-            <div>
-                <span>WebSocket 接口</span>
-                <code id="ws-endpoint">/ws/eeg/ingest</code>
-            </div>
-            <div>
-                <span>数据格式</span>
-                <code>{"timestamp": ..., "eeg": {"C3": 12.4}}</code>
-            </div>
+        <div class="experiment-fields">
+            <label>匿名参与者<input id="participant-id" value="P001" maxlength="32"></label>
+            <label>动作任务
+                <select id="task">
+                    <option>握拳</option>
+                    <option>抬臂</option>
+                    <option>腕屈</option>
+                    <option>腕伸</option>
+                    <option>多动作组合</option>
+                </select>
+            </label>
+            <label>重复次数<input id="repetition" type="number" min="1" max="999" value="1"></label>
         </div>
-        <div class="demo-send">
-            <div>
-                <span class="label">快速测试</span>
-                <p>点击按钮生成一条标准 EEG 样本，验证网页接收链路。</p>
-            </div>
-            <button id="send-demo" type="button">发送测试样本</button>
+        <div class="session-actions">
+            <button id="start-recording" class="primary" type="button">开始采集</button>
+            <button id="stop-recording" type="button" disabled>结束采集</button>
+            <span id="recording-status" class="session-status">未开始实验</span>
+            <span id="recording-time" class="session-time">00:00</span>
         </div>
-        <p id="ingest-result" class="hint"></p>
     </section>
 
-    <section class="signal-panel card">
-        <div class="section-heading">
-            <div>
-                <p class="eyebrow">LIVE EEG</p>
-                <h2>实时脑电波形</h2>
+    <section class="workspace">
+        <section class="card signal-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">NEURAL SIGNAL</p>
+                    <h2>实时脑电波形</h2>
+                </div>
+                <span id="eeg-meta" class="unit">等待 EEG</span>
             </div>
-            <span class="unit">μV · 最近 8 秒</span>
-        </div>
-        <div id="waveforms" class="waveforms"></div>
+            <div id="eeg-waveforms" class="waveforms"></div>
+        </section>
+
+        <section class="card signal-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">MUSCLE SIGNAL</p>
+                    <h2>实时肌电活动</h2>
+                </div>
+                <span id="emg-meta" class="unit">等待 EMG</span>
+            </div>
+            <div id="emg-waveforms" class="waveforms compact"></div>
+        </section>
     </section>
 
     <section class="lower-grid">
-        <section class="card recording-panel">
+        <section class="card vision-card">
             <div class="section-heading">
                 <div>
-                    <p class="eyebrow">DATASET</p>
-                    <h2>数据记录</h2>
+                    <p class="eyebrow">VISION STREAM</p>
+                    <h2>动作视觉采集</h2>
                 </div>
-                <span id="recording-status">未记录</span>
+                <span id="camera-state" class="unit">未启动</span>
             </div>
-            <div class="recording-time" id="recording-time">00:00</div>
-            <div class="recording-actions">
-                <button id="start-recording" type="button" disabled>开始记录</button>
-                <button id="stop-recording" type="button" disabled>停止记录</button>
-                <button id="download-csv" type="button" disabled>下载 CSV</button>
+            <div class="video-shell">
+                <video id="camera" autoplay muted playsinline></video>
+                <canvas id="vision-canvas"></canvas>
+                <div class="video-overlay">
+                    <span class="live-pill"><i></i> LIVE</span>
+                    <span id="vision-action">动作未标注</span>
+                    <span id="frame-count">Frame 000000</span>
+                </div>
             </div>
-            <p id="recording-file" class="hint">尚无完成的记录</p>
-            <p id="recording-error" class="error" role="alert"></p>
+            <div class="vision-actions">
+                <button id="camera-start" type="button">打开摄像头</button>
+                <button id="camera-stop" type="button" disabled>关闭摄像头</button>
+                <button id="vision-demo" type="button">视觉模拟</button>
+            </div>
+            <p id="vision-message" class="hint">浏览器摄像头用于演示视觉采集；实际实验可替换为摄像头/树莓派数据桥接。</p>
         </section>
 
-        <section class="card roadmap">
+        <section class="card timeline-card">
             <div class="section-heading">
                 <div>
-                    <p class="eyebrow">MULTIMODAL</p>
-                    <h2>多模态扩展</h2>
+                    <p class="eyebrow">EVENT MARKERS</p>
+                    <h2>实验标注与同步时间轴</h2>
                 </div>
+                <span id="label-count" class="unit">0 个标记</span>
             </div>
-            <div class="module"><b>01</b><span><strong>EEG</strong> 原始脑电</span><em>已接入</em></div>
-            <div class="module"><b>02</b><span><strong>EMG</strong> 肌电手环</span><em>可扩展</em></div>
-            <div class="module"><b>03</b><span><strong>Vision</strong> 多模态摄像头</span><em>可扩展</em></div>
-            <div class="module"><b>04</b><span><strong>Fusion</strong> 时间同步与模型训练</span><em>规划中</em></div>
+            <div class="marker-grid">
+                <button data-event="prepare" data-label="准备" type="button">准备</button>
+                <button data-event="rest" data-label="静息" type="button">静息</button>
+                <button data-event="action_start" data-label="动作开始" type="button">动作开始</button>
+                <button data-event="action_end" data-label="动作结束" type="button">动作结束</button>
+                <button data-event="quality" data-label="质量检查" type="button">质量检查</button>
+            </div>
+            <div id="timeline" class="timeline">
+                <div class="timeline-line"></div>
+                <div id="timeline-empty" class="timeline-empty">开始实验后，EEG / EMG / Vision 的时间戳会在这里关联。</div>
+            </div>
         </section>
     </section>
 
-    <footer>基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统 · 原始数据采集、同步记录与多模态训练数据构建 Demo</footer>
+    <section class="lower-grid">
+        <section class="card dataset-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">DATASET BUILDING</p>
+                    <h2>训练数据集构建</h2>
+                </div>
+                <span id="dataset-state" class="status-chip">等待采集</span>
+            </div>
+            <div class="dataset-stats">
+                <div><strong id="eeg-count">0</strong><span>EEG 样本</span></div>
+                <div><strong id="emg-count">0</strong><span>EMG 样本</span></div>
+                <div><strong id="vision-count">0</strong><span>视觉帧</span></div>
+                <div><strong id="event-count">0</strong><span>实验标记</span></div>
+            </div>
+            <div class="dataset-flow">
+                <span>原始数据</span><b>→</b><span>时间对齐</span><b>→</b><span>质量标记</span><b>→</b><span>标签关联</span><b>→</b><span>数据集导出</span>
+            </div>
+            <div class="dataset-actions">
+                <button id="download-dataset" type="button" disabled>导出多模态数据集 ZIP</button>
+                <span id="dataset-file" class="hint">完成一次实验后可导出 signals.csv、vision.csv、events.csv 和 manifest.json</span>
+            </div>
+            <p id="recording-error" class="error" role="alert"></p>
+        </section>
+
+        <section class="card quality-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">QUALITY CONTROL</p>
+                    <h2>数据质量与同步</h2>
+                </div>
+                <span id="quality-state" class="status-chip">CHECKING</span>
+            </div>
+            <div class="quality-main">
+                <div class="quality-ring"><strong id="ready-modalities">0/3</strong><span>模态在线</span></div>
+                <div class="quality-list">
+                    <div><span>同步时间差</span><strong id="sync-spread">-- ms</strong></div>
+                    <div><span>同步策略</span><strong>设备时间戳 + 事件标记</strong></div>
+                    <div><span>数据保存</span><strong>原始数据 + 处理记录</strong></div>
+                </div>
+            </div>
+            <div class="pipeline">
+                <span class="active">采集</span><i></i><span class="active">同步</span><i></i><span class="active">预处理</span><i></i><span>训练</span><i></i><span>验证</span>
+            </div>
+        </section>
+    </section>
+
+    <section class="card validation-card">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">MODEL VALIDATION</p>
+                <h2>多模态动作识别验证</h2>
+            </div>
+            <span class="status-chip">接口已预留</span>
+        </div>
+        <div class="validation-grid">
+            <div class="validation-item"><b>01</b><span>EEG</span><small>脑电单模态基线</small></div>
+            <div class="validation-item"><b>02</b><span>EMG</span><small>肌电单模态基线</small></div>
+            <div class="validation-item"><b>03</b><span>Vision</span><small>视觉单模态基线</small></div>
+            <div class="validation-item fusion"><b>04</b><span>Fusion</span><small>特征级 / 决策级融合</small></div>
+        </div>
+        <p class="hint">当前 Demo 负责把三路数据变成可追溯的训练样本；模型准确率、宏平均 F1 与混淆矩阵将在真实数据集形成后接入验证模块，不预置虚构实验结果。</p>
+    </section>
+
+    <footer>
+        脑电 · 肌电 · 视觉 · 时间同步 · 实验标注 · 数据集构建
+    </footer>
 </main>
 </body>
 </html>
