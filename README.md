@@ -1,33 +1,123 @@
-# 基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统
+# 脑电、肌电与视觉多模态数据采集与处理系统
 
-面向大学生创新创业项目的多模态生理信号采集 Demo。当前版本重点完成 **EEG 原始数据的实时接入、波形显示、记录与 CSV 数据集生成**，同时预留 EMG 肌电和视觉数据的扩展接口，为后续多模态时间同步与模型训练提供统一的数据入口。
+面向大学生创新创业项目的多模态生理信号采集与训练数据构建 Demo。系统围绕 EEG 脑电 + EMG 肌电 + Vision 视觉三路信息，重点实现设备接入、统一时间轴、实验事件标记、数据质量记录和训练数据集导出，为后续多模态动作识别模型训练提供可追溯的数据基础。
 
-## 当前功能
+本版本不绑定任何一家脑电厂商。真实设备只需要通过设备桥接程序，把采样数据转换为统一 JSON 后推送到本系统。
 
-- **模拟 EEG 数据源**：无需硬件即可演示完整采集流程。
-- **外部 EEG 接入**：任何能通过 HTTP / WebSocket 发送标准 EEG 数据的设备或桥接程序都可以接入。
-- **实时波形**：自动识别通道，Canvas 实时绘制最近 8 秒数据。
-- **状态监控**：设备名称、采样率、通道数、已接收样本数。
-- **数据记录**：开始/停止采集，并生成带时间戳的 CSV。
-- **快速演示**：网页按钮可以注入一组标准测试 EEG 样本。
-- **多模态扩展**：界面预留 EEG、EMG、Vision、Fusion 四个模块。
+## 项目对应的研究路线
 
-## 数据链路
+~~~text
+实验任务设计
+      ↓
+EEG ─────────┐
+EMG ─────────┼──→ 数据接入 → 统一时间轴 → 质量检查
+Vision ──────┘                         ↓
+                                  实验事件标注
+                                       ↓
+                               多模态训练数据集
+                                       ↓
+                           单模态 / 多模态模型验证
+~~~
 
-```text
-EEG设备 ──┐
-          │
-EMG设备 ──┼──→ 设备桥接/树莓派/电脑 ──→ 本系统 ──→ 实时波形
-          │                              │
-摄像头 ───┘                              └──→ CSV数据集
-                                                   │
-                                                   ↓
-                                            时间同步 / 模型训练
-```
+项目计划书中的核心研究内容包括：
 
-网页本身不绑定某一家 EEG 厂商。设备端只需要把数据转换成统一格式：
+1. 多模态采集硬件集成
+2. 多源数据同步与关联
+3. 数据预处理与质量管理
+4. 实验标注与数据集构建
+5. 多模态模型训练与验证
 
-```json
+当前网页 Demo 重点把前四项中的“采集—同步—标注—数据集”链路跑通；模型训练接口已预留，不在没有真实实验数据时虚构准确率或 F1 结果。
+
+## 当前可演示功能
+
+### 1. EEG 脑电
+
+- 内置模拟 EEG 数据源，无需硬件即可演示。
+- 5 通道实时波形。
+- 记录采样率、设备名称、通道数和样本数。
+- 支持真实 EEG 设备通过 HTTP / WebSocket 接入。
+- 原始数据按时间戳进入统一数据流。
+
+### 2. EMG 肌电
+
+- 内置模拟表面肌电数据源。
+- 4 通道实时活动波形。
+- 支持真实肌电手环通过 HTTP / WebSocket 接入。
+- 与 EEG 使用同一套时间戳和实验标记体系。
+
+### 3. Vision 视觉
+
+- 浏览器可直接打开摄像头进行实时预览。
+- 记录视觉帧时间戳和帧编号。
+- 可切换“视觉模拟”用于比赛现场无摄像头时的完整演示。
+- 实际项目中可由摄像头或树莓派数据桥接程序替换视觉输入。
+
+> 浏览器摄像头预览与服务端数据记录是两个层次：当前版本把视频帧元数据写入数据集，后续可继续接入视频文件或视频流存储。
+
+### 4. 时间同步
+
+系统同时保留：
+
+- 设备时间戳
+- 主机接收时间
+- 实验事件标记
+
+网页实时计算当前三类数据的时间差，并显示统一时间轴状态。实际研究阶段可进一步加入起止同步事件、漂移估计和对齐误差统计。
+
+### 5. 实验标注
+
+网页提供：
+
+- 准备
+- 静息
+- 动作开始
+- 动作结束
+- 质量检查
+
+每个标记带 Unix 时间戳，并写入 events.csv，用于将 EEG、EMG 和视觉片段关联到同一次动作任务。
+
+### 6. 多模态数据集导出
+
+一次实验结束后可以导出 ZIP，包含：
+
+~~~text
+signals.csv
+vision.csv
+events.csv
+manifest.json
+~~~
+
+其中 signals.csv 采用长表格式：
+
+~~~text
+timestamp,modality,channel,value,device,sampling_rate,session_id
+...
+~~~
+
+这样 EEG 与 EMG 即使采样率不同，也可以在后续预处理阶段按照统一时间窗口重新关联。
+
+## 真实设备接入
+
+### EEG
+
+设置：
+
+~~~dotenv
+EEG_SOURCE=external
+~~~
+
+然后重启服务。
+
+HTTP：
+
+~~~text
+POST /api/eeg/ingest
+~~~
+
+JSON：
+
+~~~json
 {
   "timestamp": 1760612400.123,
   "eeg": {
@@ -39,36 +129,61 @@ EMG设备 ──┼──→ 设备桥接/树莓派/电脑 ──→ 本系统 �
   "device": "My EEG Device",
   "sampling_rate": 250
 }
-```
+~~~
 
-其中：
+WebSocket：
 
-- `timestamp`：秒，且同一设备的数据必须递增。
-- `eeg`：通道名 → 电压值，单位 μV。
-- `device`：可选，设备名称。
-- `sampling_rate`：可选，Hz。
+~~~text
+ws://电脑IP:8000/ws/eeg/ingest
+~~~
 
-## 项目结构
+### EMG
 
-```text
-backend/
-    main.py             # FastAPI 服务、EEG 接入接口和 WebSocket
-    external_source.py  # 通用外部 EEG 数据源
-    simulator.py        # 模拟 EEG 数据源
-    stream.py           # 数据流广播
-    recorder.py         # CSV 数据记录
-frontend/
-    index.html           # 项目网页
-    app.js               # 实时波形、设备状态和记录控制
-    style.css             # 页面样式
-tests/
-    test_simulator.py
-    test_recorder.py
-data/                    # 本地 CSV 数据
-requirements.txt
-.env.example
-README.md
-```
+设置：
+
+~~~dotenv
+EMG_SOURCE=external
+~~~
+
+HTTP：
+
+~~~text
+POST /api/emg/ingest
+~~~
+
+JSON：
+
+~~~json
+{
+  "timestamp": 1760612400.123,
+  "emg": {
+    "FCR": 0.42,
+    "ECR": 0.31,
+    "BIC": 0.18,
+    "TRI": 0.22
+  },
+  "device": "My EMG Band",
+  "sampling_rate": 200
+}
+~~~
+
+WebSocket：
+
+~~~text
+ws://电脑IP:8000/ws/emg/ingest
+~~~
+
+如果设置 EEG_INGEST_TOKEN，HTTP 请求需要携带：
+
+~~~text
+X-EEG-Token: 你的令牌
+~~~
+
+WebSocket 则使用：
+
+~~~text
+?token=你的令牌
+~~~
 
 ## Windows 启动
 
@@ -76,135 +191,96 @@ README.md
 
 在项目根目录 PowerShell 执行：
 
-```powershell
+~~~powershell
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
-```
+~~~
 
 浏览器访问：
 
-```text
+~~~text
 http://127.0.0.1:8000/
-```
+~~~
 
-默认使用模拟数据：
+首次运行建议保持：
 
-```dotenv
-DATA_SOURCE=simulation
-```
+~~~dotenv
+EEG_SOURCE=simulation
+EMG_SOURCE=simulation
+VISION_SOURCE=browser
+~~~
 
-## 真实 EEG 接入
+这样无需真实硬件就可以完整展示三路数据、同步、标注和数据集导出。
 
-将 `.env` 中的数据源切换为：
-
-```dotenv
-DATA_SOURCE=external
-```
-
-然后重启服务。
-
-### HTTP
-
-向：
-
-```text
-POST /api/eeg/ingest
-```
-
-发送上面的 JSON 数据即可。
-
-如果设置了 `EEG_INGEST_TOKEN`，需要同时发送：
-
-```text
-X-EEG-Token: 你的令牌
-```
-
-### WebSocket
-
-连接：
-
-```text
-ws://电脑IP:8000/ws/eeg/ingest
-```
-
-然后逐条发送标准 EEG JSON。
-
-网页端会自动连接：
-
-```text
-ws://电脑IP:8000/ws/eeg
-```
-
-并显示接收到的数据。
-
-## 数据记录
-
-网页点击：
-
-1. **开始记录**
-2. 进行 EEG 数据采集
-3. **停止记录**
-4. **下载 CSV**
-
-文件保存于 `data/`。
-
-CSV 基本格式：
-
-```text
-timestamp,C3,C4,P3,P4
-1760612400.123,12.4,-8.2,6.7,-4.1
-...
-```
-
-原始数据保留在 CSV 中，网页波形只是可视化，不作为数据源。
-
-## 接口
+## API
 
 | 接口 | 作用 |
 | --- | --- |
-| `GET /` | 项目网页 |
-| `GET /api/source/status` | 查看 EEG 数据源状态 |
-| `POST /api/eeg/ingest` | HTTP 接收外部 EEG |
-| `WS /ws/eeg/ingest` | WebSocket 接收外部 EEG |
-| `WS /ws/eeg` | 向网页推送实时 EEG |
-| `POST /api/recording/start` | 开始 CSV 记录 |
-| `POST /api/recording/stop` | 停止 CSV 记录 |
-| `GET /api/recording/status` | 查看记录状态 |
-| `GET /api/recording/download/{filename}` | 下载已完成 CSV |
+| GET / | 多模态采集网页 |
+| GET /api/session/status | 获取三路设备、同步和记录状态 |
+| GET /api/source/status | EEG 状态兼容接口 |
+| POST /api/eeg/ingest | 接收外部 EEG |
+| POST /api/emg/ingest | 接收外部 EMG |
+| WS /ws/eeg/ingest | WebSocket 接收 EEG |
+| WS /ws/emg/ingest | WebSocket 接收 EMG |
+| WS /ws/eeg | 向网页推送 EEG |
+| WS /ws/emg | 向网页推送 EMG |
+| POST /api/vision/frame | 接收视觉帧元数据 |
+| POST /api/events/mark | 写入实验事件标记 |
+| POST /api/recording/start | 开始一次实验数据集记录 |
+| POST /api/recording/stop | 结束实验并生成数据集 ZIP |
+| GET /api/recording/status | 查看当前记录状态 |
+| GET /api/recording/download/{filename} | 下载数据集 ZIP |
+| GET /api/quality/status | 查看数据质量与同步状态 |
 
 FastAPI 自动接口文档：
 
-```text
+~~~text
 http://127.0.0.1:8000/docs
-```
+~~~
 
-## 测试
+## 项目结构
 
-Windows：
+~~~text
+backend/
+    main.py                 # FastAPI 服务与多模态 API
+    multimodal.py           # 多模态流、同步和数据集导出
+    external_source.py      # EEG / EMG 外部设备桥接输入
+    simulator.py            # EEG / EMG 模拟数据源
+    stream.py               # 旧版 EEG 流兼容模块
+    recorder.py             # 旧版 EEG CSV 记录兼容模块
 
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --check frontend/app.js
-```
+frontend/
+    index.html              # 多模态实验工作台
+    app.js                  # 波形、摄像头、标注、记录控制
+    style.css               # 页面样式
 
-GitHub Actions 还包含模拟数据冒烟测试，会自动验证服务启动、模拟 EEG 数据、记录和 CSV 下载链路。
+tests/
+    test_recorder.py
+    test_simulator.py
 
-## 项目定位
+data/
+    # 本地实验数据与导出包
 
-本版本首先解决：
+.env.example
+README.md
+requirements.txt
+~~~
 
-> **“有没有一个可以真正接收 EEG 原始数据并形成训练数据集的网页系统？”**
+## 后续开发
 
-答案是有。
+按照项目计划，下一步建议依次完成：
 
-后续只需要增加对应设备的数据桥接程序，就可以逐步接入：
+1. 确定最终 EEG / EMG / 摄像头硬件及数据接口。
+2. 为真实设备分别编写轻量级数据桥接程序。
+3. 完善同步事件、时钟漂移估计和对齐误差记录。
+4. 加入滤波、异常片段识别和质量标签。
+5. 完善视频文件保存与动作片段截取。
+6. 建立参与者、动作类别、重复次数和采集批次的数据规范。
+7. 在真实数据集基础上加入 EEG、EMG、Vision 单模态基线及多模态融合模型。
+8. 使用准确率、宏平均 F1 和混淆矩阵进行实验验证。
 
-- EEG
-- EMG 肌电
-- 摄像头/视觉
-- 时间同步
-- 多模态数据融合
-- AI 模型训练与推理
+## 数据与隐私
 
-因此网页前端和采集后端不需要绑定某一种硬件，可以随着你们最终确定的 EEG、EMG 和摄像头硬件继续扩展。
+实验参与者数据应在知情同意和学校相关要求下采集。建议使用匿名参与者编号，不在训练数据中直接保存姓名等身份信息，并对原始数据进行受控存储。
