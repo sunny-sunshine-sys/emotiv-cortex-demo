@@ -78,9 +78,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Multimodal EEG Data Acquisition Platform",
+    title="基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统",
     description="A vendor-neutral real-time EEG dashboard and acquisition gateway.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
