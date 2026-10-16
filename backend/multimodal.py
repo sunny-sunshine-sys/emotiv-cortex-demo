@@ -22,6 +22,7 @@ class MultimodalStream:
         self.modality = modality
         self.recorder = recorder
         self.last_sample_time: float | None = None
+        self.last_timestamp: float | None = None
         self.failure: str | None = None
         self.subscribers: set[asyncio.Queue] = set()
 
@@ -46,6 +47,7 @@ class MultimodalStream:
 
     def publish(self, sample: dict) -> None:
         self.last_sample_time = time.monotonic()
+        self.last_timestamp = float(sample["timestamp"])
         self.recorder.append_signal(self.modality, sample)
         for queue in self.subscribers:
             if queue.full():
@@ -79,7 +81,7 @@ class VisionStream:
         return {
             "data_source": "browser_or_external",
             "state": "connected" if fresh else "waiting_for_frame",
-            "ready": self.ready or fresh,
+            "ready": fresh,
             "message": "视觉帧时间戳已接入，可与 EEG / EMG 对齐。" if fresh else "可打开摄像头或由视觉桥接程序推送帧元数据。",
             "device": self.device,
             "sampling_rate": None,
@@ -347,8 +349,9 @@ class SessionRecorder:
 def sync_status(streams: dict[str, MultimodalStream], vision: VisionStream) -> dict:
     latest = {}
     for name, stream in streams.items():
-        if stream.last_sample_time is not None:
-            latest[name] = time.time() - (time.monotonic() - stream.last_sample_time)
+        if stream.last_timestamp is not None and stream.last_sample_time is not None:
+            if time.monotonic() - stream.last_sample_time < 5:
+                latest[name] = stream.last_timestamp
     if vision.last_timestamp is not None:
         latest["vision"] = vision.last_timestamp
     spread_ms = 0.0
