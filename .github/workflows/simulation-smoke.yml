@@ -1,0 +1,57 @@
+name: simulation-smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Start simulation server
+        run: |
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
+          echo $! > /tmp/uvicorn.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/source/status > /tmp/status.json; then
+              break
+            fi
+            sleep 1
+          done
+          cat /tmp/status.json
+          python - <<'PY'
+          import json
+          s = json.load(open("/tmp/status.json"))
+          assert s["data_source"] == "simulation"
+          assert s["ready"] is True
+          assert s["sampling_rate"] == 128
+          assert len(s["channels"]) == 5
+          PY
+      - name: Record simulated EEG
+        run: |
+          curl -fsS -X POST http://127.0.0.1:8000/api/recording/start > /tmp/start.json
+          sleep 2
+          curl -fsS -X POST http://127.0.0.1:8000/api/recording/stop > /tmp/stop.json
+          cat /tmp/stop.json
+          python - <<'PY'
+          import json, urllib.request
+          s = json.load(open("/tmp/stop.json"))
+          assert s["sample_count"] >= 100, s
+          assert len(s["channels"]) == 5, s
+          url = "http://127.0.0.1:8000" + s["download_url"]
+          data = urllib.request.urlopen(url).read().decode()
+          assert data.startswith("timestamp,AF3,AF4,T7,T8,Pz"), data[:100]
+          assert data.count("\n") > 100
+          print("simulation smoke test passed")
+          PY
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/uvicorn.log
