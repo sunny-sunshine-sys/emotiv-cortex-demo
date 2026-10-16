@@ -1,10 +1,11 @@
-"""Generic EEG input source for real devices and bridge programs.
+"""Generic external signal sources for real EEG/EMG devices and bridge programs.
 
-The web app does not talk to a vendor SDK directly. A device-specific bridge
-normalizes samples to {timestamp, eeg} and pushes them into this source.
-This keeps the dashboard independent of any single EEG manufacturer.
+Device-specific software only needs to normalize samples to:
+    {"timestamp": <unix seconds>, "<modality>": {"channel": value}}
+and push them to the corresponding HTTP/WebSocket endpoint.
 """
 
+import asyncio
 import math
 import time
 from collections import deque
@@ -12,11 +13,13 @@ from collections import deque
 from backend.simulator import EEGSample
 
 
-class ExternalEEGSource:
-    """Receive timestamped EEG samples from HTTP/WebSocket device bridges."""
+class ExternalSignalSource:
+    """Receive timestamped signal samples from HTTP/WebSocket bridges."""
 
-    def __init__(self, token: str | None = None):
-        self.queue = __import__("asyncio").Queue(maxsize=4096)
+    def __init__(self, modality: str, value_key: str, token: str | None = None):
+        self.modality = modality
+        self.value_key = value_key
+        self.queue = asyncio.Queue(maxsize=4096)
         self.token = token or ""
         self.rate_history = deque(maxlen=128)
         self.last_received_monotonic: float | None = None
@@ -26,39 +29,36 @@ class ExternalEEGSource:
             "data_source": "external",
             "state": "waiting_for_device",
             "ready": False,
-            "message": "等待 EEG 设备通过 WebSocket / HTTP 推送数据。",
+            "message": f"等待设备通过 WebSocket / HTTP 推送 {value_key} 原始采样数据。",
             "channels": [],
             "sampling_rate": None,
             "device": self.device_name,
             "accepted_samples": 0,
         }
 
-    @staticmethod
-    def validate_sample(timestamp, eeg):
+    def validate_sample(self, timestamp, values):
         if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
             raise ValueError("timestamp must be a finite number in seconds.")
         if not math.isfinite(timestamp):
             raise ValueError("timestamp must be finite.")
-        if not isinstance(eeg, dict) or not eeg or len(eeg) > 64:
-            raise ValueError("eeg must be a non-empty object with at most 64 channels.")
+        if not isinstance(values, dict) or not values or len(values) > 64:
+            raise ValueError(f"{self.value_key} must be a non-empty object with at most 64 channels.")
         clean = {}
-        for name, value in eeg.items():
+        for name, value in values.items():
             if not isinstance(name, str) or not name.strip():
-                raise ValueError("EEG channel names must be non-empty strings.")
+                raise ValueError("Channel names must be non-empty strings.")
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise ValueError(f"EEG value for {name!r} must be a finite number.")
+                raise ValueError(f"Signal value for {name!r} must be a finite number.")
             clean[name.strip()] = float(value)
-        if len(clean) != len(eeg):
-            raise ValueError("EEG channel names must be unique after trimming.")
+        if len(clean) != len(values):
+            raise ValueError("Channel names must be unique after trimming.")
         return float(timestamp), clean
 
-    def push_sample(self, timestamp, eeg, device=None, sampling_rate=None) -> dict:
-        timestamp, eeg = self.validate_sample(timestamp, eeg)
+    def push_sample(self, timestamp, values, device=None, sampling_rate=None) -> dict:
+        timestamp, values = self.validate_sample(timestamp, values)
 
-        # Device timestamps must be monotonic. This prevents an out-of-order
-        # packet from corrupting the chart and CSV time axis.
         if self.rate_history and timestamp <= self.rate_history[-1]:
-            raise ValueError("timestamp must increase for every EEG sample.")
+            raise ValueError("timestamp must increase for every sample.")
 
         self.rate_history.append(timestamp)
         self.accepted_samples += 1
@@ -81,25 +81,39 @@ class ExternalEEGSource:
         self.status.update(
             state="connected",
             ready=True,
-            message=f"正在接收 {self.device_name} 的 EEG 原始采样数据。",
-            channels=list(eeg.keys()),
+            message=f"正在接收 {self.device_name} 的 {self.value_key} 原始采样数据。",
+            channels=list(values.keys()),
             device=self.device_name,
             accepted_samples=self.accepted_samples,
         )
 
-        sample: EEGSample = {"timestamp": timestamp, "eeg": eeg}
+        sample = {
+            "timestamp": timestamp,
+            self.value_key.lower(): values,
+            "device": self.device_name,
+            "sampling_rate": self.status["sampling_rate"],
+        }
         if self.queue.full():
             self.queue.get_nowait()
         self.queue.put_nowait(sample)
         return {
             "accepted": True,
             "timestamp": timestamp,
-            "channels": list(eeg.keys()),
+            "channels": list(values.keys()),
             "sampling_rate": self.status["sampling_rate"],
             "accepted_samples": self.accepted_samples,
         }
 
     async def stream(self):
         while True:
-            sample = await self.queue.get()
-            yield sample
+            yield await self.queue.get()
+
+
+class ExternalEEGSource(ExternalSignalSource):
+    def __init__(self, token: str | None = None):
+        super().__init__("eeg", "EEG", token)
+
+
+class ExternalEMGSource(ExternalSignalSource):
+    def __init__(self, token: str | None = None):
+        super().__init__("emg", "EMG", token)
