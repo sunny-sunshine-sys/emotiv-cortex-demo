@@ -14,7 +14,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
-from backend.cortex_source import CortexEEGSource
 from backend.external_source import ExternalEEGSource
 from backend.recorder import EEGRecorder
 from backend.simulator import EEGSource, SimulatedEEGSource
@@ -40,16 +39,7 @@ def create_eeg_source() -> EEGSource:
         return SimulatedEEGSource()
     if mode == "external":
         return ExternalEEGSource(os.getenv("EEG_INGEST_TOKEN", "").strip() or None)
-    # Legacy EMOTIV adapter is retained for compatibility, but is not needed
-    # by the new vendor-neutral dashboard.
-    if mode == "emotiv":
-        return CortexEEGSource(
-            os.getenv("EMOTIV_CLIENT_ID", ""),
-            os.getenv("EMOTIV_CLIENT_SECRET", ""),
-            ca_file=os.getenv("EMOTIV_CA_CERT") or None,
-            headset_id=os.getenv("EMOTIV_HEADSET_ID") or None,
-        )
-    raise ValueError("DATA_SOURCE must be simulation, external, or emotiv.")
+    raise ValueError("DATA_SOURCE must be simulation or external.")
 
 
 def external_source(request: Request) -> ExternalEEGSource:
