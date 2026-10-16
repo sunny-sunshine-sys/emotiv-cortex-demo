@@ -338,8 +338,9 @@ function stopCamera() {
     $("camera-state").textContent = "未启动";
     $("camera-start").disabled = false;
     $("camera-stop").disabled = true;
-    if (!state.vision.demo) clearInterval(state.vision.timer);
+    clearInterval(state.vision.timer);
     state.vision.timer = null;
+    state.vision.demo = false;
 }
 
 function startVisionFrames() {
