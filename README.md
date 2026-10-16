@@ -185,7 +185,24 @@ WebSocket 则使用：
 ?token=你的令牌
 ~~~
 
-## Windows 启动
+## Windows 双击启动（推荐）
+
+1. 安装 [Python 3.10 或更新版本](https://www.python.org/downloads/windows/)，保留 Tcl/Tk、pip、Python Launcher 组件；此版本不是独立 exe。
+2. 下载 ZIP 后完整解压到可写目录，不要在 ZIP 内直接打开文件。
+3. 双击根目录 **`Start EEG Monitor.pyw`**，打开中文启动器，无需输入终端命令。
+4. 默认选择 **模拟演示**，点击 **启动并打开网页**。首次自动创建 `.venv` 并联网安装依赖；之后复用环境。
+5. 网页自动打开 `http://127.0.0.1:8000/`，可体验 EEG、EMG、视觉、实验标注与数据集导出。
+6. 完成后点击 **停止服务** 或关闭启动器，程序会正常停止后台并完成正在记录的数据集。关闭浏览器不会停止服务。
+
+**读取设备配置** 模式保留进程环境及 `.env` 配置，不会强制覆盖 EEG_SOURCE、EMG_SOURCE 或 VISION_SOURCE。点击 **设备配置 (.env)** 用记事本编辑；文件不存在时只复制 `.env.example`，不会覆盖已有配置。按上方设备桥接协议将需要的 EEG_SOURCE / EMG_SOURCE 设为 external，其余可保持 simulation。当前版本采用厂商无关的外部输入，不再直接连接旧版 Cortex API。切换模式需先停止服务。
+
+启动器提供 **打开网页**、**查看日志**，并在服务就绪后才打开浏览器。日志和模式偏好位于被 Git 忽略的 `.launcher/`，不保存设备令牌。端口 8000 被占用时会提示，不会结束其他进程。启动器通过内部管道安全停止自己的后台进程，不开放网络停止接口。
+
+默认仅监听本机 127.0.0.1，设备桥接可在同机运行；若需要其他电脑或树莓派从局域网推送，请使用手动方式并设置 `--host 0.0.0.0`，按外部接入说明配置令牌。
+
+如果 `.pyw` 被编辑器关联，可双击备用入口 **`Start EEG Monitor.vbs`**（需要 Windows VBScript 可用）。云端已验证依赖准备、HTTP、记录保存与安全停止；Windows 窗口及双击关联仍需在本机验证。
+
+## Windows 手动启动（备用）
 
 需要 Python 3.10 或更新版本。
 
@@ -251,6 +268,10 @@ backend/
     stream.py               # 旧版 EEG 流兼容模块
     recorder.py             # 旧版 EEG CSV 记录兼容模块
 
+desktop/                    # 中文启动器、依赖准备及安全停止
+Start EEG Monitor.pyw       # Windows 双击入口
+Start EEG Monitor.vbs       # 备用入口
+
 frontend/
     index.html              # 多模态实验工作台
     app.js                  # 波形、摄像头、标注、记录控制
@@ -259,6 +280,7 @@ frontend/
 tests/
     test_recorder.py
     test_simulator.py
+    test_desktop.py
 
 data/
     # 本地实验数据与导出包

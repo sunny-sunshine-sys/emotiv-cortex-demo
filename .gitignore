@@ -6,3 +6,6 @@ __pycache__/
 # Local EEG recordings (keep only the empty directory marker)
 /data/*
 !/data/.gitkeep
+
+# Desktop launcher logs and non-secret local preferences
+/.launcher/
