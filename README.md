@@ -1,4 +1,4 @@
-# EMOTIV EEG Monitor
+# 基于脑电、肌电与视觉多模态融合的神经信号采集与分析系统
 
 简易 EMOTIV Cortex EEG 数据监控系统的第四阶段：FastAPI、simulation / EMOTIV Cortex 数据源、动态通道实时仪表盘及 CSV 记录与下载。
 
